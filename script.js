@@ -7,10 +7,17 @@ const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
 const userInput = document.getElementById("userInput");
 const workerUrl = "https://still-union-bereaved.wjscata.workers.dev/"; // Replace with your Cloudflare Worker URL
+const selectedProductsStorageKey = "lorealSelectedProductIds";
 
 let allProducts = [];
 let selectedProducts = [];
 let chatHistory = [];
+let activeTooltipCard = null;
+
+const productDescriptionTooltip = document.createElement("div");
+productDescriptionTooltip.className = "product-description-tooltip";
+productDescriptionTooltip.setAttribute("aria-hidden", "true");
+document.body.appendChild(productDescriptionTooltip);
 
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
@@ -58,6 +65,94 @@ function displayProducts(products) {
 
 function getSelectedProduct(productId) {
   return selectedProducts.find((product) => product.id === productId);
+}
+
+function getProductById(productId) {
+  return allProducts.find((product) => product.id === productId);
+}
+
+function positionProductDescriptionTooltip(card) {
+  const cardRect = card.getBoundingClientRect();
+  const spacing = 10;
+  const viewportPadding = 12;
+  const tooltipWidth = productDescriptionTooltip.offsetWidth;
+  const tooltipHeight = productDescriptionTooltip.offsetHeight;
+
+  let left = cardRect.left + window.scrollX;
+  const maxLeft =
+    window.scrollX + window.innerWidth - tooltipWidth - viewportPadding;
+  left = Math.max(window.scrollX + viewportPadding, Math.min(left, maxLeft));
+
+  let top = cardRect.bottom + window.scrollY + spacing;
+  const bottomLimit =
+    window.scrollY + window.innerHeight - tooltipHeight - viewportPadding;
+
+  if (top > bottomLimit) {
+    top = cardRect.top + window.scrollY - tooltipHeight - spacing;
+  }
+
+  top = Math.max(window.scrollY + viewportPadding, top);
+
+  productDescriptionTooltip.style.left = `${left}px`;
+  productDescriptionTooltip.style.top = `${top}px`;
+}
+
+function showProductDescriptionTooltip(card) {
+  const productId = Number(card.dataset.productId);
+  const product = getProductById(productId);
+
+  if (!product) {
+    return;
+  }
+
+  activeTooltipCard = card;
+  productDescriptionTooltip.textContent = product.description;
+  productDescriptionTooltip.classList.add("is-visible");
+  positionProductDescriptionTooltip(card);
+}
+
+function hideProductDescriptionTooltip() {
+  activeTooltipCard = null;
+  productDescriptionTooltip.classList.remove("is-visible");
+}
+
+function saveSelectedProducts() {
+  const selectedProductIds = selectedProducts.map((product) => product.id);
+  localStorage.setItem(
+    selectedProductsStorageKey,
+    JSON.stringify(selectedProductIds),
+  );
+}
+
+function getSavedSelectedProductIds() {
+  const savedValue = localStorage.getItem(selectedProductsStorageKey);
+
+  if (!savedValue) {
+    return [];
+  }
+
+  try {
+    const parsedProductIds = JSON.parse(savedValue);
+
+    if (!Array.isArray(parsedProductIds)) {
+      return [];
+    }
+
+    return parsedProductIds.filter((id) => Number.isInteger(id));
+  } catch (error) {
+    console.error("Could not read saved selected products.", error);
+    return [];
+  }
+}
+
+function restoreSelectedProducts() {
+  const savedProductIds = getSavedSelectedProductIds();
+
+  selectedProducts = savedProductIds
+    .map((productId) => allProducts.find((product) => product.id === productId))
+    .filter(Boolean);
+
+  renderSelectedProducts();
 }
 
 function updateProductSelectionStyles() {
@@ -112,6 +207,7 @@ function toggleProductSelection(productId) {
     }
   }
 
+  saveSelectedProducts();
   renderSelectedProducts();
   updateProductSelectionStyles();
 }
@@ -217,6 +313,58 @@ productsContainer.addEventListener("click", (e) => {
   toggleProductSelection(Number(productCard.dataset.productId));
 });
 
+productsContainer.addEventListener("mouseover", (e) => {
+  const productCard = e.target.closest(".product-card");
+
+  if (!productCard) {
+    return;
+  }
+
+  showProductDescriptionTooltip(productCard);
+});
+
+productsContainer.addEventListener("mouseout", (e) => {
+  const productCard = e.target.closest(".product-card");
+
+  if (!productCard) {
+    return;
+  }
+
+  const nextTarget = e.relatedTarget;
+
+  if (nextTarget && productCard.contains(nextTarget)) {
+    return;
+  }
+
+  hideProductDescriptionTooltip();
+});
+
+productsContainer.addEventListener("focusin", (e) => {
+  const productCard = e.target.closest(".product-card");
+
+  if (!productCard) {
+    return;
+  }
+
+  showProductDescriptionTooltip(productCard);
+});
+
+productsContainer.addEventListener("focusout", (e) => {
+  const productCard = e.target.closest(".product-card");
+
+  if (!productCard) {
+    return;
+  }
+
+  const nextTarget = e.relatedTarget;
+
+  if (nextTarget && productCard.contains(nextTarget)) {
+    return;
+  }
+
+  hideProductDescriptionTooltip();
+});
+
 productsContainer.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") {
     return;
@@ -240,6 +388,18 @@ selectedProductsList.addEventListener("click", (e) => {
   }
 
   toggleProductSelection(Number(removeButton.dataset.removeProductId));
+});
+
+window.addEventListener("scroll", () => {
+  if (activeTooltipCard) {
+    positionProductDescriptionTooltip(activeTooltipCard);
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (activeTooltipCard) {
+    positionProductDescriptionTooltip(activeTooltipCard);
+  }
 });
 
 generateRoutineButton.addEventListener("click", () => {
@@ -291,5 +451,5 @@ chatForm.addEventListener("submit", async (e) => {
 });
 
 loadProducts().then(() => {
-  renderSelectedProducts();
+  restoreSelectedProducts();
 });
