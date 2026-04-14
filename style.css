@@ -79,6 +79,28 @@ body {
   overflow-y: auto;
   background: #fafafa;
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-message {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  white-space: pre-wrap;
+}
+
+.chat-message-user {
+  background: #111;
+  color: #fff;
+  align-self: flex-end;
+}
+
+.chat-message-assistant {
+  background: #fff;
+  color: #333;
+  align-self: flex-start;
 }
 
 /* placeholder message */
@@ -186,6 +208,12 @@ body {
   display: flex;
   gap: 15px;
   min-height: 160px;
+  cursor: pointer;
+}
+
+.product-card.is-selected {
+  border-color: #000;
+  box-shadow: inset 0 0 0 2px #000;
 }
 
 .product-card img {
@@ -230,6 +258,19 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.selected-product-chip {
+  border: 1px solid #000;
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.selected-product-chip:hover {
+  background: #000;
+  color: #fff;
 }
 
 .generate-btn {
