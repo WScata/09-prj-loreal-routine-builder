@@ -2,6 +2,9 @@
 const categoryFilter = document.getElementById("categoryFilter");
 const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
+const clearSelectedProductsButton = document.getElementById(
+  "clearSelectedProducts",
+);
 const generateRoutineButton = document.getElementById("generateRoutine");
 const chatForm = document.getElementById("chatForm");
 const chatWindow = document.getElementById("chatWindow");
@@ -169,6 +172,8 @@ function updateProductSelectionStyles() {
 }
 
 function renderSelectedProducts() {
+  clearSelectedProductsButton.disabled = selectedProducts.length === 0;
+
   if (selectedProducts.length === 0) {
     selectedProductsList.innerHTML = `
       <p class="placeholder-message">Select products from the list to build a routine.</p>
@@ -189,6 +194,13 @@ function renderSelectedProducts() {
       `,
     )
     .join("");
+}
+
+function clearSelectedProducts() {
+  selectedProducts = [];
+  saveSelectedProducts();
+  renderSelectedProducts();
+  updateProductSelectionStyles();
 }
 
 function toggleProductSelection(productId) {
@@ -268,7 +280,7 @@ function buildConversationMessages(question) {
     {
       role: "system",
       content:
-        "You are a helpful L'Oréal routine advisor. Use the selected products and the user's question to recommend a routine, explain product order, and answer follow-up questions clearly.",
+        "You are a helpful L'Oréal routine advisor. Use the selected products and the user's question to recommend a routine, explain product order, and answer follow-up questions clearly. Always base your recommendations on the products selected by the user. If the user asks a question that cannot be answered with the selected products, politely inform them that you can only provide advice based on the products they have chosen, and suggest they select different products if they want advice on something not covered by their current selection.",
     },
     {
       role: "system",
@@ -479,6 +491,10 @@ selectedProductsList.addEventListener("click", (e) => {
   }
 
   toggleProductSelection(Number(removeButton.dataset.removeProductId));
+});
+
+clearSelectedProductsButton.addEventListener("click", () => {
+  clearSelectedProducts();
 });
 
 window.addEventListener("scroll", () => {
