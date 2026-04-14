@@ -271,6 +271,16 @@ body {
     visibility 0.16s ease;
 }
 
+@media (orientation: portrait) {
+  .product-description-tooltip {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 .product-description-tooltip.is-visible {
   opacity: 1;
   visibility: visible;
