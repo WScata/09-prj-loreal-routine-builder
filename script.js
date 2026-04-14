@@ -8,6 +8,7 @@ const chatWindow = document.getElementById("chatWindow");
 const userInput = document.getElementById("userInput");
 const workerUrl = "https://still-union-bereaved.wjscata.workers.dev/"; // Replace with your Cloudflare Worker URL
 const selectedProductsStorageKey = "lorealSelectedProductIds";
+const maxContinuationRequests = 4;
 
 let allProducts = [];
 let selectedProducts = [];
@@ -237,24 +238,7 @@ function buildSelectedProductsContext() {
     .join("\n");
 }
 
-async function sendQuestionToWorker(question) {
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You are a helpful L'Oréal routine advisor. Use the selected products and the user's question to recommend a routine, explain product order, and answer follow-up questions clearly.",
-    },
-    {
-      role: "system",
-      content: `Selected products:\n${buildSelectedProductsContext()}`,
-    },
-    ...chatHistory,
-    {
-      role: "user",
-      content: question,
-    },
-  ];
-
+async function sendMessagesToWorker(messages) {
   const response = await fetch(workerUrl, {
     method: "POST",
     headers: {
@@ -279,14 +263,121 @@ async function sendQuestionToWorker(question) {
   };
 }
 
+function buildConversationMessages(question) {
+  return [
+    {
+      role: "system",
+      content:
+        "You are a helpful L'Oréal routine advisor. Use the selected products and the user's question to recommend a routine, explain product order, and answer follow-up questions clearly.",
+    },
+    {
+      role: "system",
+      content: `Selected products:\n${buildSelectedProductsContext()}`,
+    },
+    ...chatHistory,
+    {
+      role: "user",
+      content: question,
+    },
+  ];
+}
+
 function getWorkerResponseContent(data) {
+  const messageContent = data?.choices?.[0]?.message?.content;
+
+  if (Array.isArray(messageContent)) {
+    return messageContent
+      .map((part) => part?.text ?? part?.content ?? "")
+      .join("")
+      .trim();
+  }
+
+  if (typeof messageContent === "string") {
+    return messageContent;
+  }
+
+  const outputText = data?.output_text;
+
+  if (typeof outputText === "string") {
+    return outputText;
+  }
+
+  if (Array.isArray(outputText)) {
+    return outputText.join("").trim();
+  }
+
+  const outputContent = data?.output?.[0]?.content;
+
+  if (Array.isArray(outputContent)) {
+    return outputContent
+      .map((part) => part?.text ?? part?.content ?? "")
+      .join("")
+      .trim();
+  }
+
   return (
-    data?.choices?.[0]?.message?.content ??
     data?.message?.content ??
     data?.response ??
     data?.answer ??
     JSON.stringify(data, null, 2)
   );
+}
+
+function getWorkerFinishReason(data) {
+  return (
+    data?.choices?.[0]?.finish_reason ??
+    data?.finish_reason ??
+    data?.response?.status ??
+    data?.status ??
+    ""
+  );
+}
+
+function shouldRequestContinuation(partialResponse, finishReason) {
+  if (finishReason === "length" || finishReason === "max_tokens") {
+    return true;
+  }
+
+  const trimmedResponse = partialResponse.trim();
+
+  if (!trimmedResponse) {
+    return false;
+  }
+
+  return !/[.!?)]$/.test(trimmedResponse);
+}
+
+async function getCompleteAssistantResponse(question) {
+  let messages = buildConversationMessages(question);
+  const responseParts = [];
+
+  for (let attempt = 0; attempt <= maxContinuationRequests; attempt += 1) {
+    const data = await sendMessagesToWorker(messages);
+    const responsePart = String(getWorkerResponseContent(data) || "").trim();
+    const finishReason = String(
+      getWorkerFinishReason(data) || "",
+    ).toLowerCase();
+
+    if (responsePart) {
+      responseParts.push(responsePart);
+    }
+
+    if (!shouldRequestContinuation(responsePart, finishReason)) {
+      break;
+    }
+
+    messages = [
+      ...messages,
+      { role: "assistant", content: responsePart },
+      {
+        role: "user",
+        content:
+          "Continue exactly where you stopped. Do not repeat previous text. Finish the full answer.",
+      },
+    ];
+  }
+
+  return responseParts.join("\n");
 }
 
 /* Filter and display products when category changes */
@@ -433,8 +524,7 @@ chatForm.addEventListener("submit", async (e) => {
   const loadingMessage = chatWindow.lastElementChild;
 
   try {
-    const data = await sendQuestionToWorker(question);
-    const workerResponse = getWorkerResponseContent(data);
+    const workerResponse = await getCompleteAssistantResponse(question);
 
     chatHistory = [
       ...chatHistory,
